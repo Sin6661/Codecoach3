@@ -1,0 +1,803 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Code Coach — SIN STUDIO</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Inter:wght@400;500;600;700&display=swap');
+
+  :root {
+    --bg: #f5f0e8;
+    --surface: #ede8dc;
+    --panel: #e8e2d4;
+    --border: #d4cdc0;
+    --accent: #0d9488;
+    --accent2: #0f766e;
+    --correct: #0d9488;
+    --correct-dim: rgba(13,148,136,0.1);
+    --error: #dc2626;
+    --error-dim: rgba(220,38,38,0.1);
+    --text: #1c1917;
+    --text-dim: #6b7280;
+    --text-muted: #9ca3af;
+    --ghost-text: #4a7a6e;
+    --font-code: 'JetBrains Mono', 'Courier New', monospace;
+    --font-ui: 'Inter', sans-serif;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text); font-family: var(--font-ui); height: 100vh; overflow: hidden; display: flex; flex-direction: column; }
+
+  /* HEADER */
+  .header { background: linear-gradient(135deg, #0d9488, #0f766e); padding: 12px 20px; display: flex; align-items: center; gap: 16px; flex-shrink: 0; color: #fff; }
+  .header-logo { font-size: 14px; font-weight: 700; letter-spacing: 0.05em; }
+  .header-sub { font-size: 11px; opacity: 0.75; }
+  .header-right { margin-left: auto; display: flex; align-items: center; gap: 12px; }
+  .api-wrap { display: flex; align-items: center; gap: 8px; background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.2); border-radius: 6px; padding: 0 10px; height: 30px; }
+  .api-wrap label { font-size: 11px; opacity: 0.7; }
+  .api-wrap input { background: none; border: none; outline: none; color: #fff; font-family: var(--font-code); font-size: 11px; width: 160px; }
+  .api-dot { width: 7px; height: 7px; border-radius: 50%; background: rgba(255,255,255,0.3); }
+  .api-dot.on { background: #57ff8a; box-shadow: 0 0 6px #57ff8a; }
+  .prog-wrap { display: flex; align-items: center; gap: 8px; font-size: 11px; }
+  .prog-bar { width: 80px; height: 5px; background: rgba(255,255,255,0.2); border-radius: 3px; }
+  .prog-fill { height: 100%; background: #fff; border-radius: 3px; transition: width 0.4s; }
+
+  /* LESSON NAV */
+  .lesson-nav { background: var(--surface); border-bottom: 1px solid var(--border); display: flex; padding: 0 16px; gap: 2px; flex-shrink: 0; }
+  .ltab { padding: 10px 16px; font-size: 12px; font-weight: 600; color: var(--text-muted); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; transition: all 0.15s; }
+  .ltab:hover { color: var(--text); }
+  .ltab.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .ltab.done { color: var(--correct); }
+
+  /* MAIN */
+  .main { flex: 1; display: flex; overflow: hidden; }
+  .lesson { display: none; flex: 1; flex-direction: column; overflow: hidden; }
+  .lesson.active { display: flex; }
+
+  /* INSTRUCTION BAR */
+  .instr { background: var(--panel); border-bottom: 1px solid var(--border); padding: 8px 16px; font-size: 12px; color: var(--text-dim); line-height: 1.5; flex-shrink: 0; }
+  .instr strong { color: var(--accent); }
+
+  /* SPLIT */
+  .split { flex: 1; display: flex; overflow: hidden; }
+
+  /* EDITOR SIDE */
+  .editor-side { width: 75%; display: flex; flex-direction: column; border-right: 1px solid var(--border); }
+  .preview-side { width: 25%; min-width: 200px; display: flex; flex-direction: column; }
+  .panel-hdr { height: 34px; background: var(--surface); border-bottom: 1px solid var(--border); display: flex; align-items: center; padding: 0 12px; gap: 8px; flex-shrink: 0; }
+  .panel-lbl { font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.08em; }
+  .badge { margin-left: auto; font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 10px; display: none; }
+  .badge.show { display: block; }
+  .badge-err { background: var(--error-dim); color: var(--error); }
+  .badge-ok { background: var(--correct-dim); color: var(--correct); }
+
+  /* THE TRACE EDITOR — key component */
+  .editor-wrap { flex: 1; position: relative; overflow: hidden; background: #1e2a28; }
+
+  /* HIGHLIGHT LAYER — sits behind, shows colored characters */
+  .highlight-layer {
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    padding: 12px 12px 12px 50px;
+    font-family: var(--font-code);
+    font-size: 13px;
+    line-height: 22px;
+    white-space: pre;
+    overflow: auto;
+    pointer-events: none;
+    z-index: 2;
+    color: transparent; /* base color transparent, spans have color */
+  }
+
+  /* The actual textarea — sits on top, transparent text so highlight shows through */
+  .trace-ta {
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    padding: 12px 12px 12px 50px;
+    font-family: var(--font-code);
+    font-size: 13px;
+    line-height: 22px;
+    white-space: pre;
+    overflow: auto;
+    border: none;
+    outline: none;
+    resize: none;
+    background: transparent;
+    color: transparent;
+    caret-color: var(--accent);
+    z-index: 3;
+    tab-size: 2;
+    spellcheck: false;
+  }
+
+  /* LINE NUMBERS */
+  .line-nums {
+    position: absolute;
+    top: 0; left: 0;
+    width: 44px; height: 100%;
+    padding: 12px 0;
+    background: #162220;
+    border-right: 1px solid #2d4a45;
+    z-index: 4;
+    pointer-events: none;
+    overflow: hidden;
+  }
+  .ln { height: 22px; line-height: 22px; text-align: right; padding-right: 10px; font-family: var(--font-code); font-size: 11px; color: #3d6b62; }
+
+  /* RESIZER */
+  .resizer { width: 4px; background: var(--border); cursor: col-resize; flex-shrink: 0; transition: background 0.15s; }
+  .resizer:hover { background: var(--accent); }
+
+  /* PREVIEW SIDE */
+  .preview-side { flex: 1; display: flex; flex-direction: column; }
+  .preview-side iframe { flex: 1; border: none; background: #fff; }
+
+  /* COACH BAR */
+  .coach-bar { max-height: 0; overflow: hidden; background: rgba(13,148,136,0.08); border-top: 1px solid rgba(13,148,136,0.2); transition: max-height 0.25s ease; display: flex; align-items: center; padding: 0 14px; gap: 10px; flex-shrink: 0; }
+  .coach-bar.open { max-height: 52px; padding: 10px 14px; }
+  .coach-msg { font-size: 12px; color: var(--text); line-height: 1.5; flex: 1; }
+  .coach-x { background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 18px; padding: 0; }
+
+  /* CHAT */
+  .chat-section { height: 200px; border-top: 1px solid var(--border); display: flex; flex-direction: column; flex-shrink: 0; }
+  .chat-msgs { flex: 1; overflow-y: auto; padding: 10px 14px; display: flex; flex-direction: column; gap: 8px; background: var(--panel); }
+  .msg { max-width: 80%; padding: 7px 11px; border-radius: 10px; font-size: 12px; line-height: 1.5; }
+  .msg-coach { background: rgba(13,148,136,0.1); border: 1px solid rgba(13,148,136,0.2); color: var(--text); align-self: flex-start; border-bottom-left-radius: 3px; }
+  .msg-user { background: rgba(13,148,136,0.15); color: var(--text); align-self: flex-end; border-bottom-right-radius: 3px; }
+  .chat-row { display: flex; gap: 8px; padding: 8px 10px; border-top: 1px solid var(--border); background: var(--surface); flex-shrink: 0; }
+  .chat-row input { flex: 1; background: var(--panel); border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-family: var(--font-ui); font-size: 12px; padding: 7px 10px; outline: none; }
+  .chat-row input:focus { border-color: var(--accent); }
+  .chat-btn { background: var(--accent); border: none; border-radius: 6px; color: #fff; font-weight: 700; font-size: 12px; padding: 0 14px; cursor: pointer; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <div class="header-logo">⚡ CODE COACH</div>
+    <div class="header-sub">SIN STUDIO — Dashboard Module</div>
+  </div>
+  <div class="header-right">
+    <div class="prog-wrap">
+      <span>Progress</span>
+      <div class="prog-bar"><div class="prog-fill" id="progFill" style="width:0%"></div></div>
+      <span id="progPct">0%</span>
+    </div>
+    <div class="api-wrap">
+      <label>GROQ</label>
+      <input type="password" id="apiKey" placeholder="gsk_..." oninput="checkKey()">
+      <div class="api-dot" id="apiDot"></div>
+    </div>
+  </div>
+</div>
+
+<div class="lesson-nav">
+  <div class="ltab active" id="ltab1" onclick="goLesson(1)">1 — HTML Structure</div>
+  <div class="ltab" id="ltab2" onclick="goLesson(2)">2 — CSS Styling</div>
+  <div class="ltab" id="ltab3" onclick="goLesson(3)">3 — JavaScript Tabs</div>
+  <div class="ltab" id="ltab4" onclick="goLesson(4)">4 — Make It Yours</div>
+</div>
+
+<div class="main">
+
+  <!-- LESSON 1 -->
+  <div class="lesson active" id="L1">
+    <div class="instr"><strong>Lesson 1 — HTML Structure:</strong> The code is already in the editor. Place your cursor at the very beginning and start typing — trace every character exactly. Watch the preview build on the right as you go.</div>
+    <div class="split">
+      <div class="editor-side" id="es1">
+        <div class="panel-hdr">
+          <div class="panel-lbl">✏️ Trace the Code</div>
+          <div class="badge badge-err" id="berr1">❌ wrong character</div>
+          <div class="badge badge-ok" id="bok1">✓ on track</div>
+        </div>
+        <div class="editor-wrap" id="ew1">
+          <div class="line-nums" id="ln1"></div>
+          <div class="highlight-layer" id="hl1"></div>
+          <textarea class="trace-ta" id="ta1" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off"></textarea>
+        </div>
+        <div class="coach-bar" id="cb1"><span>🤖</span><div class="coach-msg" id="cm1"></div><button class="coach-x" onclick="hideCoach(1)">×</button></div>
+      </div>
+      <div class="resizer" id="rs1"></div>
+      <div class="preview-side">
+        <div class="panel-hdr"><div class="panel-lbl">👁 Live Preview</div></div>
+        <iframe id="pv1"></iframe>
+      </div>
+    </div>
+    <div class="chat-section">
+      <div class="chat-msgs" id="ms1"><div class="msg msg-coach">Start typing at the very beginning of the code — trace it character by character. I'll watch and help if you get stuck! 👋</div></div>
+      <div class="chat-row"><input type="text" id="ci1" placeholder="Ask Coach..." onkeydown="if(event.key==='Enter')ask(1)"><button class="chat-btn" onclick="ask(1)">Ask</button></div>
+    </div>
+  </div>
+
+  <!-- LESSON 2 -->
+  <div class="lesson" id="L2">
+    <div class="instr"><strong>Lesson 2 — CSS Styling:</strong> Now trace the stylesheet. Every color, font, and layout rule is in here. Watch the dashboard transform as you type.</div>
+    <div class="split">
+      <div class="editor-side" id="es2">
+        <div class="panel-hdr">
+          <div class="panel-lbl">✏️ Trace the Code</div>
+          <div class="badge badge-err" id="berr2">❌ wrong character</div>
+          <div class="badge badge-ok" id="bok2">✓ on track</div>
+        </div>
+        <div class="editor-wrap" id="ew2">
+          <div class="line-nums" id="ln2"></div>
+          <div class="highlight-layer" id="hl2"></div>
+          <textarea class="trace-ta" id="ta2" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off"></textarea>
+        </div>
+        <div class="coach-bar" id="cb2"><span>🤖</span><div class="coach-msg" id="cm2"></div><button class="coach-x" onclick="hideCoach(2)">×</button></div>
+      </div>
+      <div class="resizer" id="rs2"></div>
+      <div class="preview-side">
+        <div class="panel-hdr"><div class="panel-lbl">👁 Live Preview</div></div>
+        <iframe id="pv2"></iframe>
+      </div>
+    </div>
+    <div class="chat-section">
+      <div class="chat-msgs" id="ms2"><div class="msg msg-coach">CSS is what makes everything look good! Trace it out and watch the colors and layout appear. 🎨</div></div>
+      <div class="chat-row"><input type="text" id="ci2" placeholder="Ask Coach..." onkeydown="if(event.key==='Enter')ask(2)"><button class="chat-btn" onclick="ask(2)">Ask</button></div>
+    </div>
+  </div>
+
+  <!-- LESSON 3 -->
+  <div class="lesson" id="L3">
+    <div class="instr"><strong>Lesson 3 — JavaScript Tabs:</strong> This code makes the tabs clickable. Trace it and your dashboard becomes interactive.</div>
+    <div class="split">
+      <div class="editor-side" id="es3">
+        <div class="panel-hdr">
+          <div class="panel-lbl">✏️ Trace the Code</div>
+          <div class="badge badge-err" id="berr3">❌ wrong character</div>
+          <div class="badge badge-ok" id="bok3">✓ on track</div>
+        </div>
+        <div class="editor-wrap" id="ew3">
+          <div class="line-nums" id="ln3"></div>
+          <div class="highlight-layer" id="hl3"></div>
+          <textarea class="trace-ta" id="ta3" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off"></textarea>
+        </div>
+        <div class="coach-bar" id="cb3"><span>🤖</span><div class="coach-msg" id="cm3"></div><button class="coach-x" onclick="hideCoach(3)">×</button></div>
+      </div>
+      <div class="resizer" id="rs3"></div>
+      <div class="preview-side">
+        <div class="panel-hdr"><div class="panel-lbl">👁 Live Preview</div></div>
+        <iframe id="pv3"></iframe>
+      </div>
+    </div>
+    <div class="chat-section">
+      <div class="chat-msgs" id="ms3"><div class="msg msg-coach">JavaScript makes your dashboard interactive! Every function you trace controls how the tabs work. ⚡</div></div>
+      <div class="chat-row"><input type="text" id="ci3" placeholder="Ask Coach..." onkeydown="if(event.key==='Enter')ask(3)"><button class="chat-btn" onclick="ask(3)">Ask</button></div>
+    </div>
+  </div>
+
+  <!-- LESSON 4 -->
+  <div class="lesson" id="L4">
+    <div class="instr"><strong>Lesson 4 — Make It Yours:</strong> Edit freely! Change the title, tab names, card labels, and colors to match YOUR niche. Gardening? Car maintenance? Go for it.</div>
+    <div class="split">
+      <div class="editor-side" id="es4">
+        <div class="panel-hdr">
+          <div class="panel-lbl">✏️ Edit Freely</div>
+          <button onclick="downloadDash()" style="margin-left:auto;background:var(--accent);color:#fff;border:none;border-radius:6px;padding:4px 12px;font-size:11px;font-weight:700;cursor:pointer;">⬇ Download</button>
+        </div>
+        <div class="editor-wrap" id="ew4">
+          <div class="line-nums" id="ln4"></div>
+          <div class="highlight-layer" id="hl4"></div>
+          <textarea class="trace-ta" id="ta4" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off" style="color:var(--text);caret-color:var(--accent);"></textarea>
+        </div>
+        <div class="coach-bar" id="cb4"><span>🤖</span><div class="coach-msg" id="cm4"></div><button class="coach-x" onclick="hideCoach(4)">×</button></div>
+      </div>
+      <div class="resizer" id="rs4"></div>
+      <div class="preview-side">
+        <div class="panel-hdr"><div class="panel-lbl">👁 Live Preview</div></div>
+        <iframe id="pv4"></iframe>
+      </div>
+    </div>
+    <div class="chat-section">
+      <div class="chat-msgs" id="ms4"><div class="msg msg-coach">This is YOUR dashboard now! Tell me your niche and I'll help you customize every part. 🚀</div></div>
+      <div class="chat-row"><input type="text" id="ci4" placeholder="Ask Coach..." onkeydown="if(event.key==='Enter')ask(4)"><button class="chat-btn" onclick="ask(4)">Ask</button></div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ── LESSON CODE ───────────────────────────────────────────────────────────────
+const CODE = {
+1: `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>My Dashboard</title>
+</head>
+<body>
+
+  <div class="header">
+    <h1>My Dashboard</h1>
+    <p>Welcome back!</p>
+  </div>
+
+  <div class="tabs">
+    <div class="tab active" onclick="showTab('overview')">Overview</div>
+    <div class="tab" onclick="showTab('tracker')">Tracker</div>
+    <div class="tab" onclick="showTab('notes')">Notes</div>
+  </div>
+
+  <div class="content">
+    <div class="cards">
+      <div class="card">
+        <div class="card-label">Total Items</div>
+        <div class="card-value">12</div>
+      </div>
+      <div class="card">
+        <div class="card-label">Completed</div>
+        <div class="card-value">8</div>
+      </div>
+      <div class="card">
+        <div class="card-label">Pending</div>
+        <div class="card-value">4</div>
+      </div>
+    </div>
+    <div class="tab-panel" id="overview">
+      <div class="panel"><h2>Overview</h2><p>Your overview content here.</p></div>
+    </div>
+    <div class="tab-panel" id="tracker">
+      <div class="panel"><h2>Tracker</h2><p>Your tracker content here.</p></div>
+    </div>
+    <div class="tab-panel" id="notes">
+      <div class="panel"><h2>Notes</h2><p>Your notes here.</p></div>
+    </div>
+  </div>
+
+</body>
+</html>`,
+
+2: `<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: Arial, sans-serif;
+    background: #f0f2f5;
+    color: #333;
+  }
+
+  .header {
+    background: #2c3e50;
+    color: white;
+    padding: 20px 30px;
+  }
+
+  .header h1 { font-size: 24px; }
+
+  .header p {
+    font-size: 14px;
+    opacity: 0.7;
+    margin-top: 4px;
+  }
+
+  .tabs {
+    display: flex;
+    background: #fff;
+    border-bottom: 2px solid #e0e0e0;
+    padding: 0 30px;
+  }
+
+  .tab {
+    padding: 14px 20px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 600;
+    color: #888;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -2px;
+  }
+
+  .tab.active {
+    color: #2c3e50;
+    border-bottom-color: #2c3e50;
+  }
+
+  .content { padding: 30px; }
+
+  .cards {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+
+  .card {
+    background: #fff;
+    border-radius: 8px;
+    padding: 20px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+  }
+
+  .card-label {
+    font-size: 12px;
+    color: #888;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .card-value {
+    font-size: 32px;
+    font-weight: 700;
+    color: #2c3e50;
+    margin-top: 8px;
+  }
+
+  .tab-panel { display: none; }
+
+  .panel {
+    background: #fff;
+    border-radius: 8px;
+    padding: 20px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+  }
+
+  .panel h2 {
+    font-size: 16px;
+    margin-bottom: 12px;
+    color: #2c3e50;
+  }
+
+  .panel p { color: #888; font-size: 14px; }
+</style>`,
+
+3: `<script>
+  function showTab(name) {
+    document.querySelectorAll('.tab').forEach(function(t) {
+      t.classList.remove('active');
+    });
+    document.querySelectorAll('.tab-panel').forEach(function(p) {
+      p.style.display = 'none';
+    });
+    event.target.classList.add('active');
+    document.getElementById(name).style.display = 'block';
+  }
+
+  window.onload = function() {
+    document.getElementById('overview').style.display = 'block';
+  };
+<\/script>`,
+
+4: `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>My Dashboard</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: Arial, sans-serif; background: #f0f2f5; color: #333; }
+    .header { background: #2c3e50; color: white; padding: 20px 30px; }
+    .header h1 { font-size: 24px; }
+    .header p { font-size: 14px; opacity: 0.7; margin-top: 4px; }
+    .tabs { display: flex; background: #fff; border-bottom: 2px solid #e0e0e0; padding: 0 30px; }
+    .tab { padding: 14px 20px; cursor: pointer; font-size: 14px; font-weight: 600; color: #888; border-bottom: 2px solid transparent; margin-bottom: -2px; }
+    .tab.active { color: #2c3e50; border-bottom-color: #2c3e50; }
+    .content { padding: 30px; }
+    .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 24px; }
+    .card { background: #fff; border-radius: 8px; padding: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+    .card-label { font-size: 12px; color: #888; text-transform: uppercase; letter-spacing: 0.05em; }
+    .card-value { font-size: 32px; font-weight: 700; color: #2c3e50; margin-top: 8px; }
+    .tab-panel { display: none; }
+    .panel { background: #fff; border-radius: 8px; padding: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+    .panel h2 { font-size: 16px; margin-bottom: 12px; color: #2c3e50; }
+    .panel p { color: #888; font-size: 14px; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>My Dashboard</h1>
+    <p>Welcome back! Change this to your niche.</p>
+  </div>
+  <div class="tabs">
+    <div class="tab active" onclick="showTab('overview')">Overview</div>
+    <div class="tab" onclick="showTab('tracker')">Tracker</div>
+    <div class="tab" onclick="showTab('notes')">Notes</div>
+  </div>
+  <div class="content">
+    <div class="cards">
+      <div class="card"><div class="card-label">Stat One</div><div class="card-value">12</div></div>
+      <div class="card"><div class="card-label">Stat Two</div><div class="card-value">8</div></div>
+      <div class="card"><div class="card-label">Stat Three</div><div class="card-value">4</div></div>
+    </div>
+    <div class="tab-panel" id="overview"><div class="panel"><h2>Overview</h2><p>Your content here.</p></div></div>
+    <div class="tab-panel" id="tracker"><div class="panel"><h2>Tracker</h2><p>Your content here.</p></div></div>
+    <div class="tab-panel" id="notes"><div class="panel"><h2>Notes</h2><p>Your notes here.</p></div></div>
+  </div>
+  <script>
+    function showTab(n){document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));document.querySelectorAll('.tab-panel').forEach(p=>p.style.display='none');event.target.classList.add('active');document.getElementById(n).style.display='block';}
+    window.onload=function(){document.getElementById('overview').style.display='block';};
+  <\/script>
+</body>
+</html>`
+};
+
+// Coach tips per lesson at % completion
+const TIPS = {
+  1:[
+    {at:10, msg:"You're typing the HTML skeleton — every webpage starts exactly like this!"},
+    {at:45, msg:"See the div tags? They're like boxes that hold your content. The class name tells CSS how to style them later."},
+    {at:80, msg:"Almost done! The tab-panel divs will show/hide when tabs are clicked in Lesson 3. 🔥"}
+  ],
+  2:[
+    {at:10, msg:"CSS is where all the visual design lives — colors, fonts, spacing, layout. You're painting your dashboard!"},
+    {at:50, msg:"See background: #2c3e50? That's a hex color code. You can change it to any color you want in Lesson 4!"},
+    {at:85, msg:"grid-template-columns: repeat(3, 1fr) puts your 3 cards in a row automatically. Super useful! 🎨"}
+  ],
+  3:[
+    {at:15, msg:"JavaScript makes things interactive! This function runs every time someone clicks a tab."},
+    {at:55, msg:"querySelectorAll grabs ALL matching elements at once. forEach loops through each one. You just learned a loop! 🤯"},
+    {at:85, msg:"window.onload makes the first tab visible when the page loads. Clean trick! ⚡"}
+  ],
+  4:[
+    {at:3, msg:"Find 'My Dashboard' in the h1 tag and change it to your niche name. That's your first customization!"}
+  ]
+};
+
+// ── STATE ─────────────────────────────────────────────────────────────────────
+let done = {1:false,2:false,3:false,4:false};
+let tipsShown = {};
+let idleT = {};
+let apiKey = '';
+let pvT = {};
+
+// ── INIT ──────────────────────────────────────────────────────────────────────
+window.addEventListener('DOMContentLoaded', () => {
+  [1,2,3,4].forEach(n => {
+    // Pre-load the code into the textarea
+    const ta = document.getElementById('ta' + n);
+    ta.value = CODE[n];
+
+    // Render highlight layer with ghost styling initially
+    renderHighlight(n);
+    buildLineNums(n, CODE[n]);
+    initResizer(n);
+
+    ta.addEventListener('input', () => onType(n));
+    ta.addEventListener('scroll', () => syncScroll(n));
+
+    // Lesson 4 is freeform — show text normally
+    if (n === 4) {
+      ta.style.color = 'var(--text)';
+      updatePreview(4, CODE[4]);
+    }
+  });
+
+  // Welcome coach
+  setTimeout(() => showCoach(1, "The code is already loaded! Place your cursor at the start and trace every character. Green = correct, red = wrong. Go! 💪"), 1000);
+});
+
+// ── TYPING ────────────────────────────────────────────────────────────────────
+function onType(n) {
+  if (n === 4) {
+    // Freeform — just update preview and line nums
+    buildLineNums(n, document.getElementById('ta' + n).value);
+    updatePreview(4, document.getElementById('ta' + n).value);
+    return;
+  }
+
+  const ta = document.getElementById('ta' + n);
+  const typed = ta.value;
+  const target = CODE[n];
+
+  renderHighlight(n, typed, target);
+  buildLineNums(n, typed.length > target.length ? typed : target);
+  checkBadge(n, typed, target);
+  checkComplete(n, typed, target);
+  checkTips(n, typed, target);
+  updatePreview(n, buildCode(n, typed));
+  resetIdle(n, typed, target);
+}
+
+function renderHighlight(n, typed, target) {
+  const hl = document.getElementById('hl' + n);
+  target = target || CODE[n];
+  typed = typed || '';
+
+  let html = '';
+  const len = Math.max(typed.length, target.length);
+
+  for (let i = 0; i < len; i++) {
+    const tc = typed[i];
+    const gc = target[i];
+
+    if (i >= typed.length) {
+      // Not yet typed — show ghost
+      const ch = gc === '<' ? '&lt;' : gc === '>' ? '&gt;' : gc === '&' ? '&amp;' : gc;
+      html += `<span style="color:var(--ghost-text)">${ch}</span>`;
+    } else if (tc === gc) {
+      // Correct — green
+      const ch = tc === '<' ? '&lt;' : tc === '>' ? '&gt;' : tc === '&' ? '&amp;' : tc;
+      html += `<span style="color:var(--correct)">${ch}</span>`;
+    } else {
+      // Wrong — red background
+      const ch = tc === '<' ? '&lt;' : tc === '>' ? '&gt;' : tc === '&' ? '&amp;' : tc;
+      html += `<span style="color:var(--error);background:var(--error-dim)">${ch}</span>`;
+    }
+  }
+
+  hl.innerHTML = html;
+}
+
+function buildLineNums(n, content) {
+  const lines = (typeof content === 'string' ? content : CODE[n]).split('\n').length;
+  document.getElementById('ln' + n).innerHTML =
+    Array.from({length: Math.max(lines, 1)}, (_, i) => `<div class="ln">${i+1}</div>`).join('');
+}
+
+function syncScroll(n) {
+  const ta = document.getElementById('ta' + n);
+  const hl = document.getElementById('hl' + n);
+  const ln = document.getElementById('ln' + n);
+  hl.scrollTop = ta.scrollTop;
+  hl.scrollLeft = ta.scrollLeft;
+  ln.scrollTop = ta.scrollTop;
+}
+
+function checkBadge(n, typed, target) {
+  const err = document.getElementById('berr' + n);
+  const ok = document.getElementById('bok' + n);
+  if (!typed) { err.classList.remove('show'); ok.classList.remove('show'); return; }
+  let hasErr = false;
+  for (let i = 0; i < typed.length; i++) {
+    if (typed[i] !== target[i]) { hasErr = true; break; }
+  }
+  err.classList.toggle('show', hasErr);
+  ok.classList.toggle('show', !hasErr);
+}
+
+function checkComplete(n, typed, target) {
+  if (!done[n] && typed.trim() === target.trim()) {
+    done[n] = true;
+    document.getElementById('ltab' + n).classList.add('done');
+    updateProgress();
+    showCoach(n, `🎉 Lesson ${n} complete! You traced it perfectly. ${n < 4 ? 'Move to Lesson ' + (n+1) + '!' : 'You built a full dashboard from scratch!'}`);
+    addMsg(n, 'coach', `✅ Lesson ${n} done! ${n < 4 ? 'Click Lesson ' + (n+1) + ' above to keep going.' : 'Amazing work — download your dashboard above!'}`);
+  }
+}
+
+function checkTips(n, typed, target) {
+  const pct = typed.length / target.length * 100;
+  (TIPS[n] || []).forEach(tip => {
+    const key = n + '_' + tip.at;
+    if (!tipsShown[key] && pct >= tip.at) {
+      tipsShown[key] = true;
+      showCoach(n, tip.msg);
+    }
+  });
+}
+
+function buildCode(n, typed) {
+  // Combine lessons up to current for preview
+  if (n === 1) return typed;
+  if (n === 2) return CODE[1] + '\n' + typed;
+  if (n === 3) return CODE[1] + '\n' + CODE[2] + '\n' + typed;
+  return typed;
+}
+
+function updatePreview(n, code) {
+  clearTimeout(pvT[n]);
+  pvT[n] = setTimeout(() => {
+    const fr = document.getElementById('pv' + n);
+    const doc = fr.contentDocument || fr.contentWindow.document;
+    doc.open(); doc.write(code || ''); doc.close();
+  }, 500);
+}
+
+function updateProgress() {
+  const c = Object.values(done).filter(Boolean).length;
+  const pct = Math.round(c / 4 * 100);
+  document.getElementById('progFill').style.width = pct + '%';
+  document.getElementById('progPct').textContent = pct + '%';
+}
+
+// ── IDLE ──────────────────────────────────────────────────────────────────────
+function resetIdle(n, typed, target) {
+  clearTimeout(idleT[n]);
+  idleT[n] = setTimeout(() => {
+    if (typed.length < target.length) {
+      showCoach(n, "Still here? Keep tracing — you've got this! Or ask a question below if you're stuck 💬");
+    }
+  }, 30000);
+}
+
+// ── COACH ─────────────────────────────────────────────────────────────────────
+function showCoach(n, msg) {
+  const cb = document.getElementById('cb' + n);
+  document.getElementById('cm' + n).innerHTML = msg;
+  cb.classList.add('open');
+  clearTimeout(window['ct' + n]);
+  window['ct' + n] = setTimeout(() => hideCoach(n), 9000);
+}
+function hideCoach(n) { document.getElementById('cb' + n).classList.remove('open'); }
+
+// ── LESSON SWITCH ─────────────────────────────────────────────────────────────
+function goLesson(n) {
+  document.querySelectorAll('.lesson').forEach(l => l.classList.remove('active'));
+  document.querySelectorAll('.ltab').forEach(t => t.classList.remove('active'));
+  document.getElementById('L' + n).classList.add('active');
+  document.getElementById('ltab' + n).classList.add('active');
+}
+
+// ── API KEY ───────────────────────────────────────────────────────────────────
+function checkKey() {
+  apiKey = document.getElementById('apiKey').value.trim();
+  document.getElementById('apiDot').className = 'api-dot' + (apiKey.startsWith('gsk_') ? ' on' : '');
+}
+
+// ── CHAT ──────────────────────────────────────────────────────────────────────
+function addMsg(n, role, text) {
+  const el = document.getElementById('ms' + n);
+  const d = document.createElement('div');
+  d.className = 'msg msg-' + role;
+  d.innerHTML = text;
+  el.appendChild(d);
+  el.scrollTop = el.scrollHeight;
+}
+
+async function ask(n) {
+  const inp = document.getElementById('ci' + n);
+  const q = inp.value.trim();
+  if (!q) return;
+  if (!apiKey) { addMsg(n, 'coach', '⚠️ Add your Groq API key at the top to unlock AI coaching.'); inp.value=''; return; }
+
+  addMsg(n, 'user', q);
+  inp.value = '';
+
+  const thinking = document.createElement('div');
+  thinking.className = 'msg msg-coach';
+  thinking.innerHTML = '<em style="opacity:0.5">thinking...</em>';
+  document.getElementById('ms' + n).appendChild(thinking);
+
+  const ctx = {1:'HTML structure — tags, divs, semantic elements',2:'CSS — colors, layout, flexbox, grid, box-shadow',3:'JavaScript — functions, querySelectorAll, classList, forEach',4:'Customizing the dashboard for a specific niche'};
+  const typed = document.getElementById('ta' + n).value;
+  const pct = n < 4 ? Math.round(typed.length / CODE[n].length * 100) : 100;
+
+  try {
+    const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+apiKey},
+      body: JSON.stringify({
+        model:'llama-3.3-70b-versatile',
+        max_tokens:300,
+        messages:[
+          {role:'system',content:`You are Code Coach inside SIN STUDIO's "Run AI Free & Offline" community. Teaching beginners to build a plain HTML dashboard — no AI yet, that's the upsell later.\n\nLesson ${n}: ${ctx[n]}\nStudent progress: ${pct}%\n\nRules: Short encouraging answers. Reference specific tags/properties. Give exact code when stuck. Vanilla HTML/CSS/JS only. End with a motivating nudge.`},
+          {role:'user',content:q}
+        ]
+      })
+    });
+    const data = await res.json();
+    thinking.innerHTML = data.choices?.[0]?.message?.content || "Try again!";
+  } catch(e) {
+    thinking.innerHTML = '⚠️ Could not reach Groq. Check your API key.';
+  }
+  document.getElementById('ms' + n).scrollTop = 99999;
+}
+
+// ── DOWNLOAD ──────────────────────────────────────────────────────────────────
+function downloadDash() {
+  const code = document.getElementById('ta4').value;
+  const blob = new Blob([code], {type:'text/html'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'my-dashboard.html';
+  a.click();
+}
+
+// ── RESIZER ───────────────────────────────────────────────────────────────────
+function initResizer(n) {
+  const rs = document.getElementById('rs' + n);
+  const es = document.getElementById('es' + n);
+  if (!rs || !es) return;
+  let drag = false;
+  rs.addEventListener('mousedown', () => { drag=true; document.body.style.cursor='col-resize'; document.body.style.userSelect='none'; });
+  document.addEventListener('mousemove', e => {
+    if (!drag) return;
+    const rect = es.parentElement.getBoundingClientRect();
+    es.style.width = Math.max(25, Math.min(75, (e.clientX - rect.left) / rect.width * 100)) + '%';
+  });
+  document.addEventListener('mouseup', () => { drag=false; document.body.style.cursor=''; document.body.style.userSelect=''; });
+}
+</script>
+</body>
+</html>
